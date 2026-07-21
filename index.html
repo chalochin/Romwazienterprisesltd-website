@@ -58,6 +58,92 @@
   </div>
 </section>
 
+<!-- SALES TRACKER -->
+<section class="tracker-section" id="tracker">
+  <div class="tracker-header">
+    <div>
+      <p class="section-label">Sales Tracker</p>
+      <h2 class="section-title">Record everyday sales and spot fast movers</h2>
+      <p class="section-sub">Capture each sale, track revenue and cost of goods sold, and identify the items that need more attention.</p>
+    </div>
+  </div>
+
+  <div class="tracker-grid">
+    <form class="tracker-form" id="salesForm">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="salesDate">Sale Date</label>
+          <input class="form-input" id="salesDate" name="salesDate" type="date" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="itemName">Item Name</label>
+          <input class="form-input" id="itemName" name="itemName" type="text" placeholder="e.g. Facial Tissues" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="unitsSold">Units Sold</label>
+          <input class="form-input" id="unitsSold" name="unitsSold" type="number" min="1" step="1" placeholder="10" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="unitCost">Cost per Unit (KES)</label>
+          <input class="form-input" id="unitCost" name="unitCost" type="number" min="0" step="0.01" placeholder="120" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="unitPrice">Selling Price per Unit (KES)</label>
+          <input class="form-input" id="unitPrice" name="unitPrice" type="number" min="0" step="0.01" placeholder="150" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="notes">Notes</label>
+          <input class="form-input" id="notes" name="notes" type="text" placeholder="Branch, promotion, bulk order">
+        </div>
+      </div>
+
+      <button type="submit" class="form-submit" id="salesSubmitBtn">Save Sale</button>
+    </form>
+
+    <div class="tracker-summary">
+      <div class="summary-card accent-teal">
+        <span class="summary-label">Revenue</span>
+        <strong id="revenueValue">KES 0.00</strong>
+      </div>
+      <div class="summary-card accent-amber">
+        <span class="summary-label">Cost of Goods Sold</span>
+        <strong id="cogsValue">KES 0.00</strong>
+      </div>
+      <div class="summary-card accent-green">
+        <span class="summary-label">Gross Profit</span>
+        <strong id="profitValue">KES 0.00</strong>
+      </div>
+      <div class="summary-card accent-slate">
+        <span class="summary-label">Units Sold</span>
+        <strong id="unitsValue">0</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="tracker-panels">
+    <div class="tracker-card">
+      <div class="tracker-card-header">
+        <h3>Sales History</h3>
+        <button type="button" class="ghost-btn" id="clearEntriesBtn">Clear</button>
+      </div>
+      <div class="tracker-table" id="salesTable"></div>
+    </div>
+
+    <div class="tracker-card">
+      <div class="tracker-card-header">
+        <h3>Fast & Slow Movers</h3>
+      </div>
+      <div id="movementList"></div>
+    </div>
+  </div>
+</section>
+
 <!-- TICKER -->
 <div class="ticker-wrap">
   <div class="ticker-inner" id="ticker"></div>
@@ -516,6 +602,121 @@
   }
 
   renderProducts(products);
+
+  // ── Sales Tracker ──
+  const STORAGE_KEY = 'romwazi-sales-tracker';
+  const salesEntries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+
+  function formatCurrency(value) {
+    return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', maximumFractionDigits: 0 }).format(value);
+  }
+
+  function calculateSummary() {
+    const totals = salesEntries.reduce((acc, entry) => {
+      const revenue = Number(entry.unitsSold) * Number(entry.unitPrice);
+      const cogs = Number(entry.unitsSold) * Number(entry.unitCost);
+      acc.revenue += revenue;
+      acc.cogs += cogs;
+      acc.units += Number(entry.unitsSold);
+      return acc;
+    }, { revenue: 0, cogs: 0, units: 0 });
+
+    document.getElementById('revenueValue').textContent = formatCurrency(totals.revenue);
+    document.getElementById('cogsValue').textContent = formatCurrency(totals.cogs);
+    document.getElementById('profitValue').textContent = formatCurrency(totals.revenue - totals.cogs);
+    document.getElementById('unitsValue').textContent = totals.units.toLocaleString();
+  }
+
+  function renderSalesEntries() {
+    const table = document.getElementById('salesTable');
+    if (!salesEntries.length) {
+      table.innerHTML = '<p style="color:var(--muted)">No sales recorded yet. Add your first entry.</p>';
+      return;
+    }
+
+    table.innerHTML = salesEntries.map(entry => `
+      <div class="tracker-row">
+        <div>
+          <strong>${entry.itemName}</strong>
+          <small>${entry.notes || 'No notes'}</small>
+        </div>
+        <div>${entry.unitsSold} units</div>
+        <div>${formatCurrency(entry.unitPrice)} / unit</div>
+        <div>${formatCurrency(entry.unitCost)} / unit</div>
+        <div>${entry.salesDate}</div>
+      </div>
+    `).join('');
+  }
+
+  function renderMovementInsights() {
+    const list = document.getElementById('movementList');
+    const grouped = salesEntries.reduce((acc, entry) => {
+      const key = entry.itemName.toLowerCase();
+      if (!acc[key]) {
+        acc[key] = { name: entry.itemName, units: 0, revenue: 0, cogs: 0 };
+      }
+      acc[key].units += Number(entry.unitsSold);
+      acc[key].revenue += Number(entry.unitsSold) * Number(entry.unitPrice);
+      acc[key].cogs += Number(entry.unitsSold) * Number(entry.unitCost);
+      return acc;
+    }, {});
+
+    const items = Object.values(grouped).sort((a, b) => b.units - a.units);
+    if (!items.length) {
+      list.innerHTML = '<p style="color:var(--muted)">Sales data will appear here once you add entries.</p>';
+      return;
+    }
+
+    list.innerHTML = `
+      <div class="movement-list">
+        ${items.map(item => {
+          const profit = item.revenue - item.cogs;
+          const label = item.units >= 20 ? 'Fast mover' : 'Slow mover';
+          const pillClass = item.units >= 20 ? 'fast' : 'slow';
+          return `
+            <div class="movement-item">
+              <div>
+                <strong>${item.name}</strong>
+                <div class="movement-meta">${item.units} units • Profit ${formatCurrency(profit)}</div>
+              </div>
+              <span class="tag-pill ${pillClass}">${label}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function saveEntries() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(salesEntries));
+    calculateSummary();
+    renderSalesEntries();
+    renderMovementInsights();
+  }
+
+  function clearEntries() {
+    salesEntries.length = 0;
+    saveEntries();
+  }
+
+  document.getElementById('salesForm').addEventListener('submit', function (event) {
+    event.preventDefault();
+    const formData = new FormData(this);
+    const entry = Object.fromEntries(formData.entries());
+    entry.unitsSold = Number(entry.unitsSold);
+    entry.unitCost = Number(entry.unitCost);
+    entry.unitPrice = Number(entry.unitPrice);
+    salesEntries.unshift(entry);
+    this.reset();
+    document.getElementById('salesDate').valueAsDate = new Date();
+    saveEntries();
+  });
+
+  document.getElementById('clearEntriesBtn').addEventListener('click', clearEntries);
+  document.getElementById('salesDate').valueAsDate = new Date();
+  calculateSummary();
+  renderSalesEntries();
+  renderMovementInsights();
 
   // ── Product Detail Modal ──
   function openPD(p) {
